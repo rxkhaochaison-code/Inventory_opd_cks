@@ -32,6 +32,9 @@ interface GasSetupModalProps {
   telegramConfig: TelegramConfig;
   onSaveTelegramConfig: (config: TelegramConfig) => void;
   initialTab?: 'config' | 'code' | 'telegram' | 'guide';
+  googleUser?: any;
+  onConnectGoogle?: () => void;
+  isGoogleConnecting?: boolean;
 }
 
 export const GasSetupModal: React.FC<GasSetupModalProps> = ({
@@ -44,6 +47,9 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
   telegramConfig,
   onSaveTelegramConfig,
   initialTab = 'config',
+  googleUser,
+  onConnectGoogle,
+  isGoogleConnecting,
 }) => {
   const [activeTab, setActiveTab] = useState<'config' | 'code' | 'telegram' | 'guide'>('config');
   const [sheetId, setSheetId] = useState(gasConfig.sheetId || '');
@@ -221,6 +227,28 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
   const handleFetchFromSheet = async () => {
     setIsSyncingDown(true);
     setStatusMessage(null);
+
+    // 1. ลองดึงตรงผ่าน Google Sheets REST API หากล็อกอิน Google ไว้
+    try {
+      const { getAccessToken } = await import('../services/googleAuthService');
+      const { GoogleSheetsDirectService } = await import('../services/googleSheetsDirectService');
+      const token = await getAccessToken();
+      if (token) {
+        const directRes = await GoogleSheetsDirectService.fetchDrugs(sheetId.trim());
+        if (directRes.success && directRes.items) {
+          if (directRes.items.length === 0) {
+            setStatusMessage({ success: true, text: 'ดึงข้อมูลสำเร็จ แต่ยังไม่มีรายการยาใน Google Sheet' });
+          } else {
+            onApplyFetchedDrugs(directRes.items);
+            setStatusMessage({ success: true, text: `ดึงข้อมูลตรงจาก Google Sheet สำเร็จ! อัปเดต ${directRes.items.length} รายการเข้าสู่ระบบ` });
+          }
+          setIsSyncingDown(false);
+          return;
+        }
+      }
+    } catch (e) {}
+
+    // 2. Fallback to GAS Web App
     const res = await GasApiService.fetchDrugs({
       sheetId: sheetId.trim(),
       scriptUrl: scriptUrl.trim(),
@@ -246,6 +274,30 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
   const handleUploadAllToSheet = async () => {
     setIsSyncingUp(true);
     setStatusMessage(null);
+
+    // 1. ลองซิงค์ตรงผ่าน Google Sheets REST API ก่อน
+    try {
+      const { getAccessToken } = await import('../services/googleAuthService');
+      const { GoogleSheetsDirectService } = await import('../services/googleSheetsDirectService');
+      const token = await getAccessToken();
+      if (token) {
+        const directRes = await GoogleSheetsDirectService.syncAllToSheets(sheetId.trim(), drugs);
+        if (directRes.success) {
+          setStatusMessage({
+            success: true,
+            text: `ส่งข้อมูลยา ${drugs.length} รายการขึ้น Google Sheet ID: ${sheetId.trim()} ตรงผ่าน Google Sheets API สำเร็จสมบูรณ์! (พร้อมโครงสร้าง 19 คอลัมน์สถานะ)`,
+          });
+          setIsSyncingUp(false);
+          return;
+        } else {
+          console.warn('Direct sync note:', directRes.error);
+        }
+      }
+    } catch (e) {
+      console.warn('Direct sync error:', e);
+    }
+
+    // 2. Fallback to GAS Web App
     const res = await GasApiService.syncAllToGas(
       { sheetId: sheetId.trim(), scriptUrl: scriptUrl.trim(), folderId: folderId.trim(), autoSync: true, lastSyncTime: null },
       drugs
@@ -483,7 +535,7 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
                   <FileCode className="w-3.5 h-3.5 text-teal-700" />
-                  <span>Google Apps Script Web App URL</span>
+                  <span>Google Apps Script Web App URL (ตัวเลือกเสริม)</span>
                 </label>
                 <input
                   type="text"
@@ -492,6 +544,9 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
                   className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white"
                   placeholder="https://script.google.com/macros/s/.../exec"
                 />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  💡 <strong>แนะนำ:</strong> ใช้ปุ่ม "เชื่อมต่อ Google เพื่อซิงค์ลง Sheet" ที่หน้าหลักเพื่อส่งข้อมูลลง Sheet ID: {sheetId} โดยตรงโดยไม่ต้องสร้าง Web App | หากต้องการใช้ Web App กรุณาเปิดชีทใหม่ &gt; ส่วนขยาย &gt; Apps Script วางโค้ด Code.gs กด Deploy เป็น Anyone แล้วนำ URL ใหม่มาวางที่นี่
+                </p>
               </div>
 
               {/* Folder ID */}

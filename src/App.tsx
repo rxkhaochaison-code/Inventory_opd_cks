@@ -15,7 +15,11 @@ import { GasApiService } from './services/gasApiService';
 import { TelegramService } from './services/telegramService';
 import { generateGoogleAppsScriptCode } from './services/gasCodeTemplate';
 import { exportDrugsToExcel, downloadExcelTemplate } from './services/fileParser';
-import { CheckCircle2, AlertTriangle, Trash2, Copy, FileSpreadsheet } from 'lucide-react';
+import { GoogleSheetsDirectService } from './services/googleSheetsDirectService';
+import { initAuth, googleSignIn, getAccessToken } from './services/googleAuthService';
+import { SyncConfirmModal } from './components/SyncConfirmModal';
+import { User } from 'firebase/auth';
+import { CheckCircle2, AlertTriangle, Trash2, Copy, FileSpreadsheet, ExternalLink } from 'lucide-react';
 
 const SHEET_ID = '1z4wlxHJlRdMPEubDenBDAyrqOlwpCBphu5FY5APUwjQ';
 
@@ -28,10 +32,15 @@ const GAS_CONFIG: GasConfig = {
 };
 
 export default function App() {
-  // Authentication State
+  // Authentication State (Persistent login so user doesn't need to re-login every round)
   const [currentUser, setCurrentUser] = useState<string | null>(() => {
-    return sessionStorage.getItem('kcs_auth_user');
+    return localStorage.getItem('kcs_auth_user') || sessionStorage.getItem('kcs_auth_user');
   });
+
+  // Google OAuth State
+  const [googleUser, setGoogleUser] = useState<User | null>(null);
+  const [isGoogleConnecting, setIsGoogleConnecting] = useState(false);
+  const [isSyncConfirmModalOpen, setIsSyncConfirmModalOpen] = useState(false);
 
   // State
   const [drugs, setDrugs] = useState<DrugItem[]>([]);
@@ -72,7 +81,14 @@ export default function App() {
   // Toast state
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
-  // Load initial data and auto-sync with Google Sheet
+  const updateSyncTimestamp = () => {
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} น.`;
+    setLastSyncTime(timeStr);
+    return timeStr;
+  };
+
+  // Load initial data and auto-sync with Google Sheet (Direct API prioritized)
   useEffect(() => {
     const loadedDrugs = StorageService.getDrugs();
     setDrugs(loadedDrugs);
@@ -80,35 +96,78 @@ export default function App() {
     setDispenseRecords(loadedLogs);
 
     // Initial background sync with Google Sheet
-    GasApiService.fetchDrugs(gasConfig)
-      .then((res) => {
-        if (res.success && res.items && res.items.length > 0) {
-          setDrugs(res.items);
-          StorageService.saveDrugs(res.items);
-          const t = updateSyncTimestamp();
-          setSyncStatus({ status: 'success', lastTime: t });
-          // ตรวจจับและแจ้งเตือนเข้ากลุ่ม Telegram อัตโนมัติเมื่อพบสถานะยาเปลี่ยน (เช่น ยาหมดอายุ, ใกล้หมดอายุ, ต่ำกว่า min)
-          TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, res.items).catch(() => {});
-        } else if (res.success) {
-          // If sheet is empty, auto-push initial drugs with status columns to sheet
-          autoPushToSheet(loadedDrugs);
-          TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, loadedDrugs).catch(() => {});
-        } else {
-          setSyncStatus({ status: 'error', errorText: res.error, lastTime: null });
-          // แม้เชื่อมต่อชีทไม่ได้ ก็ตรวจสถานะจากข้อมูลในเว็บและแจ้งเตือนเข้า Telegram อัตโนมัติ
-          TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, loadedDrugs).catch(() => {});
+    const runInitialSync = async () => {
+      const token = await getAccessToken();
+      if (token) {
+        // Direct Google Sheets API sync without requiring user to click
+        try {
+          const directRes = await GoogleSheetsDirectService.fetchDrugs(gasConfig.sheetId);
+          if (directRes.success && directRes.items && directRes.items.length > 0) {
+            setDrugs(directRes.items);
+            StorageService.saveDrugs(directRes.items);
+            const t = updateSyncTimestamp();
+            setSyncStatus({ status: 'success', lastTime: t });
+            TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, directRes.items).catch(() => {});
+            return;
+          } else if (directRes.success) {
+            // Sheet is empty or initial, auto-push local drugs
+            if (loadedDrugs.length > 0) {
+              const pushRes = await GoogleSheetsDirectService.syncAllToSheets(gasConfig.sheetId, loadedDrugs);
+              if (pushRes.success) {
+                const t = updateSyncTimestamp();
+                setSyncStatus({ status: 'success', lastTime: t });
+              }
+            }
+            TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, loadedDrugs).catch(() => {});
+            return;
+          }
+        } catch (err: any) {
+          console.warn('Initial direct sheet sync warning:', err);
         }
-      })
-      .catch((err) => {
-        setSyncStatus({ status: 'error', errorText: err.message, lastTime: null });
-        TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, loadedDrugs).catch(() => {});
-      });
-  }, []);
+      }
+
+      // Secondary fallback to GAS Web App
+      GasApiService.fetchDrugs(gasConfig)
+        .then((res) => {
+          if (res.success && res.items && res.items.length > 0) {
+            setDrugs(res.items);
+            StorageService.saveDrugs(res.items);
+            const t = updateSyncTimestamp();
+            setSyncStatus({ status: 'success', lastTime: t });
+            TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, res.items).catch(() => {});
+          } else if (res.success) {
+            autoPushToSheet(loadedDrugs);
+            TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, loadedDrugs).catch(() => {});
+          } else {
+            setSyncStatus({ status: 'error', errorText: res.error, lastTime: null });
+            TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, loadedDrugs).catch(() => {});
+          }
+        })
+        .catch((err) => {
+          setSyncStatus({ status: 'error', errorText: err.message, lastTime: null });
+          TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, loadedDrugs).catch(() => {});
+        });
+    };
+
+    runInitialSync();
+  }, [gasConfig.sheetId]);
 
   // ระบบตรวจสอบสถานะยาอัตโนมัติในเบื้องหลังทุก 2.5 นาที (Auto-check & Auto-notify status changes)
-  // ตรวจจับทั้งการเปลี่ยนแปลงจาก Google Sheet และบนเว็บ ส่งเข้ากลุ่ม Telegram ทันทีโดยไม่ต้องกดปุ่ม
   useEffect(() => {
-    const timer = setInterval(() => {
+    const timer = setInterval(async () => {
+      const token = await getAccessToken();
+      if (token) {
+        try {
+          const directRes = await GoogleSheetsDirectService.fetchDrugs(gasConfig.sheetId);
+          if (directRes.success && directRes.items && directRes.items.length > 0) {
+            setDrugs(directRes.items);
+            StorageService.saveDrugs(directRes.items);
+            TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, directRes.items).catch(() => {});
+            return;
+          }
+        } catch {}
+      }
+
       GasApiService.fetchDrugs(gasConfig)
         .then((res) => {
           if (res.success && res.items && res.items.length > 0) {
@@ -129,15 +188,127 @@ export default function App() {
     return () => clearInterval(timer);
   }, [gasConfig, telegramConfig]);
 
-  const updateSyncTimestamp = () => {
-    const now = new Date();
-    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} น.`;
-    setLastSyncTime(timeStr);
-    return timeStr;
+  // Listen to Google Auth state and auto-connect
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (user, token) => {
+        setGoogleUser(user);
+        // Automatically sync on auth restoration if not synced yet
+        if (token) {
+          GoogleSheetsDirectService.fetchDrugs(gasConfig.sheetId)
+            .then((res) => {
+              if (res.success && res.items && res.items.length > 0) {
+                setDrugs(res.items);
+                StorageService.saveDrugs(res.items);
+                const t = updateSyncTimestamp();
+                setSyncStatus({ status: 'success', lastTime: t });
+              }
+            })
+            .catch(() => {});
+        }
+      },
+      () => {
+        setGoogleUser(null);
+      }
+    );
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [gasConfig.sheetId]);
+
+  // Connect Google account and auto-sync immediately (1-click, no repeated popups)
+  const handleConnectGoogle = async () => {
+    setIsGoogleConnecting(true);
+    try {
+      const res = await googleSignIn();
+      if (res?.user) {
+        setGoogleUser(res.user);
+        showToast('success', `เชื่อมต่อ Google (${res.user.email}) สำเร็จ! บันทึกการเชื่อมต่ออัตโนมัติแล้ว`);
+        // Immediately sync to the sheet
+        setIsSyncing(true);
+        setSyncStatus({ status: 'syncing' });
+        const syncRes = await GoogleSheetsDirectService.syncAllToSheets(gasConfig.sheetId, drugs);
+        if (syncRes.success) {
+          const t = updateSyncTimestamp();
+          setSyncStatus({ status: 'success', lastTime: t });
+          showToast('success', `ส่งข้อมูลยา ${drugs.length} รายการลง Google Sheet สำเร็จเรียบร้อย`);
+        } else {
+          setSyncStatus({ status: 'error', errorText: syncRes.error });
+          showToast('error', syncRes.error || 'ซิงค์ข้อมูลไม่สำเร็จ');
+        }
+        setIsSyncing(false);
+      }
+    } catch (err: any) {
+      showToast('error', `เชื่อมต่อ Google ไม่สำเร็จ: ${err.message}`);
+    } finally {
+      setIsGoogleConnecting(false);
+    }
+  };
+
+  // Disconnect Google account
+  const handleDisconnectGoogle = async () => {
+    try {
+      const { logoutGoogle } = await import('./services/googleAuthService');
+      await logoutGoogle();
+      setGoogleUser(null);
+      showToast('info', 'ตัดการเชื่อมต่อบัญชี Google เรียบร้อยแล้ว');
+    } catch (err: any) {
+      showToast('error', `ตัดการเชื่อมต่อไม่สำเร็จ: ${err.message}`);
+    }
+  };
+
+  // Execute sync directly to Google Sheets (after user confirmation)
+  const executeSheetSync = async () => {
+    setIsSyncing(true);
+    setSyncStatus({ status: 'syncing' });
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        setIsSyncConfirmModalOpen(false);
+        await handleConnectGoogle();
+        return;
+      }
+
+      const syncRes = await GoogleSheetsDirectService.syncAllToSheets(gasConfig.sheetId, drugs);
+      if (syncRes.success) {
+        const t = updateSyncTimestamp();
+        setSyncStatus({ status: 'success', lastTime: t });
+        showToast('success', `ส่งข้อมูลยา ${drugs.length} รายการลง Google Sheet (ID: ${gasConfig.sheetId}) สำเร็จเรียบร้อย!`);
+        setIsSyncConfirmModalOpen(false);
+      } else {
+        setSyncStatus({ status: 'error', errorText: syncRes.error, lastTime: lastSyncTime });
+        showToast('error', syncRes.error || 'ซิงค์ข้อมูลไม่สำเร็จ');
+        if (syncRes.needsAuth) {
+          setGoogleUser(null);
+        }
+      }
+    } catch (err: any) {
+      setSyncStatus({ status: 'error', errorText: err.message, lastTime: lastSyncTime });
+      showToast('error', `เกิดข้อผิดพลาด: ${err.message}`);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   // Auto-push updates to Google Sheet in the background without needing user to click sync
   const autoPushToSheet = async (currentDrugs: DrugItem[]) => {
+    // 1. Try Direct Google Sheets API if Google user is authenticated
+    const token = await getAccessToken();
+    if (token) {
+      try {
+        const directRes = await GoogleSheetsDirectService.syncAllToSheets(gasConfig.sheetId, currentDrugs);
+        if (directRes.success) {
+          const t = updateSyncTimestamp();
+          setSyncStatus({ status: 'success', lastTime: t });
+          TelegramService.checkAndNotifyStatusChangesAutomatically(telegramConfig, currentDrugs).catch(() => {});
+          return;
+        }
+      } catch (err: any) {
+        console.warn('Direct Google Sheet auto-sync note:', err);
+      }
+    }
+
+    // 2. Fallback to Google Apps Script Web App
     try {
       const res = await GasApiService.syncAllToGas(gasConfig, currentDrugs);
       if (res.success) {
@@ -157,47 +328,27 @@ export default function App() {
 
   // Manual Sync Button Handler
   const handleManualSync = async () => {
-    setIsSyncing(true);
-    setSyncStatus((prev) => ({ ...prev, status: 'syncing' }));
-    showToast('info', 'กำลังเชื่อมต่อและซิงค์ข้อมูลกับ Google Sheet รพ.เขาชัยสน...');
-    try {
-      const fetchRes = await GasApiService.fetchDrugs(gasConfig);
-      if (fetchRes.success && fetchRes.items && fetchRes.items.length > 0) {
-        setDrugs(fetchRes.items);
-        StorageService.saveDrugs(fetchRes.items);
-        await GasApiService.syncAllToGas(gasConfig, fetchRes.items);
-        const t = updateSyncTimestamp();
-        setSyncStatus({ status: 'success', lastTime: t });
-        showToast('success', `ซิงค์กับ Google Sheet สำเร็จแล้ว (${fetchRes.items.length} รายการ)`);
-      } else if (fetchRes.success) {
-        const pushRes = await GasApiService.syncAllToGas(gasConfig, drugs);
-        if (pushRes.success) {
-          const t = updateSyncTimestamp();
-          setSyncStatus({ status: 'success', lastTime: t });
-          showToast('success', `ส่งข้อมูล ${drugs.length} รายการขึ้น Google Sheet สำเร็จ`);
-        } else {
-          setSyncStatus({ status: 'error', errorText: pushRes.error, lastTime: lastSyncTime });
-          showToast('error', pushRes.error || 'ซิงค์ไม่สำเร็จ');
-        }
-      } else {
-        setSyncStatus({ status: 'error', errorText: fetchRes.error, lastTime: lastSyncTime });
-        showToast('error', fetchRes.error || 'ไม่สามารถเชื่อมต่อกับ Google Apps Script ได้');
-      }
-    } catch (err: any) {
-      setSyncStatus({ status: 'error', errorText: err.message, lastTime: lastSyncTime });
-      showToast('error', `เกิดข้อผิดพลาด: ${err.message}`);
-    } finally {
-      setIsSyncing(false);
+    // 1. If Google account is connected, open confirmation modal to sync directly
+    const token = await getAccessToken();
+    if (token) {
+      setIsSyncConfirmModalOpen(true);
+      return;
     }
+
+    // If not connected with Google yet, prompt Google login first
+    showToast('info', 'กำลังเชื่อมต่อบัญชี Google เพื่อซิงค์ข้อมูลลง Google Sheet โดยตรง...');
+    handleConnectGoogle();
   };
 
   const handleLoginSuccess = (user: string) => {
+    localStorage.setItem('kcs_auth_user', user);
     sessionStorage.setItem('kcs_auth_user', user);
     setCurrentUser(user);
     showToast('success', `ยินดีต้อนรับ ${user} เข้าสู่ระบบคลังยานอก รพ.เขาชัยสน`);
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('kcs_auth_user');
     sessionStorage.removeItem('kcs_auth_user');
     setCurrentUser(null);
   };
@@ -310,6 +461,7 @@ export default function App() {
 
     // Auto-sync directly to Google Sheet in background
     autoPushToSheet(updatedDrugs);
+    GoogleSheetsDirectService.recordDispense(gasConfig.sheetId, record).catch(() => {});
     GasApiService.dispenseItemToGas(gasConfig, record).catch(() => {});
 
     // ส่งแจ้งเตือนการตัดยอดเข้า Telegram ทันที
@@ -427,78 +579,23 @@ export default function App() {
         onOpenHistoryModal={() => setIsHistoryModalOpen(true)}
         currentUser={currentUser}
         onLogout={handleLogout}
+        googleUser={googleUser}
+        onConnectGoogle={handleConnectGoogle}
+        isGoogleConnecting={isGoogleConnecting}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        
-        {/* Google Sheet Sync Warning & 1-Click Fix Banner */}
+        {/* Apps Script Guide when sync status has error */}
         {syncStatus.status === 'error' && (
-          <div className="bg-amber-50 border-2 border-amber-400 p-4 rounded-2xl shadow-sm text-slate-800 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-start space-x-3">
-                <div className="p-2 bg-amber-100 rounded-xl text-amber-700 flex-shrink-0 mt-0.5">
-                  <AlertTriangle className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-sm sm:text-base font-bold text-amber-950 font-['Prompt'] flex items-center gap-2">
-                    <span>ข้อมูลยังไม่ขึ้น Google Sheet ใหม่</span>
-                    <span className="text-xs bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full font-semibold">
-                      ต้องนำ Code.gs ไปวางและ Deploy ในชีทใหม่
-                    </span>
-                  </h4>
-                  <p className="text-xs text-amber-900 mt-1 leading-relaxed">
-                    <strong>สาเหตุ:</strong> {syncStatus.errorText || 'สคริปต์ Web App เดิมยังไม่มีสิทธิ์เข้าถึง Google Sheet ใหม่ หรือยังไม่ได้สร้าง Apps Script ในชีทใหม่'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-wrap items-center gap-2 sm:self-center flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const code = generateGoogleAppsScriptCode(gasConfig.sheetId, gasConfig.folderId);
-                    navigator.clipboard.writeText(code);
-                    showToast('success', 'คัดลอกโค้ด Code.gs สำหรับชีทใหม่เรียบร้อยแล้ว!');
-                  }}
-                  className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-semibold shadow-xs transition active:scale-95 cursor-pointer"
-                  title="คัดลอกโค้ด Code.gs ทั้งหมดไปวางใน Apps Script"
-                >
-                  <Copy className="w-3.5 h-3.5 text-emerald-300" />
-                  <span>คัดลอก Code.gs (19 คอลัมน์)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsGasModalOpen(true)}
-                  className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold shadow-xs transition cursor-pointer"
-                >
-                  <span>วิธีแก้ด่วน & ตั้งค่า URL</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleManualSync}
-                  disabled={isSyncing}
-                  className="inline-flex items-center space-x-1 px-3 py-2 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-xl text-xs font-medium transition cursor-pointer"
-                >
-                  <span>{isSyncing ? 'กำลังลอง...' : 'ลองซิงค์ใหม่'}</span>
-                </button>
-              </div>
+          <div className="bg-amber-50 border border-amber-300 p-4 rounded-2xl shadow-xs text-slate-800 space-y-2">
+            <div className="flex items-center space-x-2 text-amber-900 font-bold text-xs sm:text-sm">
+              <AlertTriangle className="w-4 h-4 text-amber-700" />
+              <span>การเชื่อมต่อ Google Sheet / Apps Script:</span>
             </div>
-
-            {/* Quick 5-Step Guide Banner */}
-            <div className="bg-white/80 p-3.5 rounded-xl border border-amber-200 text-xs text-slate-700 space-y-1.5">
-              <span className="font-bold text-amber-950 block">📌 วิธีทำให้ข้อมูลขึ้น Google Sheet ใหม่ใน 1 นาที:</span>
-              <ol className="list-decimal list-inside space-y-1 text-[11px] sm:text-xs text-slate-700 pl-1">
-                <li>กดปุ่ม <strong>"คัดลอก Code.gs (19 คอลัมน์)"</strong> ด้านบน</li>
-                <li>เปิด Google Sheet ใหม่ (<a href={`https://docs.google.com/spreadsheets/d/${gasConfig.sheetId}/edit`} target="_blank" rel="noopener noreferrer" className="text-emerald-700 underline font-mono">ID: {gasConfig.sheetId}</a>) ไปที่เมนู <strong>ส่วนขยาย (Extensions) &gt; Apps Script</strong></li>
-                <li>ลบโค้ดเดิมทั้งหมดในไฟล์ <code>Code.gs</code> แล้ววางโค้ดที่คัดลอก จากนั้นกด <strong>บันทึก (💾)</strong></li>
-                <li>กด <strong>ทำให้ใช้งานได้ (Deploy) &gt; การทำให้ใช้งานได้รายการใหม่ (New deployment)</strong> &gt; เลือกประเภท <strong>เว็บแอป (Web App)</strong> &gt; สิทธิ์เข้าถึง (Who has access) เป็น <strong>ทุกคน (Anyone)</strong> &gt; กด <strong>ทำให้ใช้งานได้</strong></li>
-                <li>คัดลอก <strong>URL เว็บแอปใหม่</strong> ที่ได้ นำมากดปุ่ม <strong>"วิธีแก้ด่วน &amp; ตั้งค่า URL"</strong> ด้านบน แล้ววางลงในช่อง URL แล้วกดบันทึก จากนั้นกด <strong>"ลองซิงค์ใหม่"</strong> ข้อมูลยาและคอลัมน์สถานะจะซิงค์ขึ้นชีทใหม่ทันที!</li>
-              </ol>
-            </div>
+            <p className="text-xs text-amber-800">
+              {syncStatus.errorText || 'ระบบไม่สามารถซิงค์ข้อมูลกับ Google Sheet ได้ แนะนำให้ตรวจสอบสิทธิ์การเข้าถึง หรือเชื่อมต่อ Google ใหม่อีกครั้ง'}
+            </p>
           </div>
         )}
         
@@ -740,6 +837,16 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* 8. Google Sheets Direct Sync Confirmation Modal */}
+      <SyncConfirmModal
+        isOpen={isSyncConfirmModalOpen}
+        onClose={() => setIsSyncConfirmModalOpen(false)}
+        onConfirm={executeSheetSync}
+        sheetId={gasConfig.sheetId}
+        itemCount={drugs.length}
+        isLoading={isSyncing}
+      />
 
     </div>
   );
