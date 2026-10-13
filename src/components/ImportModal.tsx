@@ -32,7 +32,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   onClose,
   onImportDrugs,
   gasConfig = {
-    sheetId: '17Ja3Q7hKMt01AxGDhYbCkpE9RMHHCjIbf_aVEvqFROc',
+    sheetId: '1z4wlxHJlRdMPEubDenBDAyrqOlwpCBphu5FY5APUwjQ',
     scriptUrl: '',
     folderId: '1O8MiCSQ43f2aoI7HvcPPY4EM97szYqlb',
     autoSync: false,

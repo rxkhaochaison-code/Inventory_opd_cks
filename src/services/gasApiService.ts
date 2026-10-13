@@ -50,6 +50,20 @@ export function parseGasResponse(resText: string): { success: boolean; data?: an
     if (resText.startsWith('<!DOCTYPE html>') || resText.includes('<html')) {
       const titleMatch = resText.match(/<title>([^<]+)<\/title>/i);
       const title = titleMatch ? titleMatch[1].trim() : 'Google Error';
+
+      if (
+        resText.includes('找不到網頁') ||
+        resText.includes('無法開啟這個檔案') ||
+        resText.includes('unable to open this file') ||
+        resText.includes('Google 雲端硬碟')
+      ) {
+        return {
+          success: false,
+          error:
+            'Google Apps Script (Web App URL เดิม) ไม่สามารถเข้าถึง Sheet ใหม่ได้: กรุณาเปิด Google Sheet ใหม่ ไปที่ "ส่วนขยาย > Apps Script" วางโค้ด Code.gs กด Deploy -> New deployment เป็น Anyone แล้วนำ Web App URL ใหม่มาวาง หรือแชร์สิทธิ์ชีทใหม่เป็น Editor ให้กับบัญชีผู้สร้าง Script',
+        };
+      }
+
       return {
         success: false,
         error: `Google Apps Script ตอบกลับเป็นหน้าข้อผิดพลาด (${title}) — กรุณาตรวจสอบว่าวางโค้ดใน Code.gs ครบถ้วนและ Deploy New Version หรือยัง`,

@@ -17,7 +17,7 @@ import { generateGoogleAppsScriptCode } from './services/gasCodeTemplate';
 import { exportDrugsToExcel, downloadExcelTemplate } from './services/fileParser';
 import { CheckCircle2, AlertTriangle, Trash2, Copy, FileSpreadsheet } from 'lucide-react';
 
-const SHEET_ID = '17Ja3Q7hKMt01AxGDhYbCkpE9RMHHCjIbf_aVEvqFROc';
+const SHEET_ID = '1z4wlxHJlRdMPEubDenBDAyrqOlwpCBphu5FY5APUwjQ';
 
 const GAS_CONFIG: GasConfig = {
   sheetId: SHEET_ID,
@@ -442,13 +442,13 @@ export default function App() {
                 </div>
                 <div>
                   <h4 className="text-sm sm:text-base font-bold text-amber-950 font-['Prompt'] flex items-center gap-2">
-                    <span>Google Sheet ยังไม่ได้เชื่อมต่อ / ไม่ได้ซิงค์</span>
+                    <span>ข้อมูลยังไม่ขึ้น Google Sheet ใหม่</span>
                     <span className="text-xs bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full font-semibold">
-                      ต้องอัปเดต Code.gs
+                      ต้องนำ Code.gs ไปวางและ Deploy ในชีทใหม่
                     </span>
                   </h4>
                   <p className="text-xs text-amber-900 mt-1 leading-relaxed">
-                    <strong>สาเหตุ:</strong> {syncStatus.errorText || 'Google Apps Script แจ้งว่า Script function not found (doGet/doPost) หรือยังไม่ได้กด Deploy New version เป็น Anyone'}
+                    <strong>สาเหตุ:</strong> {syncStatus.errorText || 'สคริปต์ Web App เดิมยังไม่มีสิทธิ์เข้าถึง Google Sheet ใหม่ หรือยังไม่ได้สร้าง Apps Script ในชีทใหม่'}
                   </p>
                 </div>
               </div>
@@ -460,7 +460,7 @@ export default function App() {
                   onClick={() => {
                     const code = generateGoogleAppsScriptCode(gasConfig.sheetId, gasConfig.folderId);
                     navigator.clipboard.writeText(code);
-                    showToast('success', 'คัดลอกโค้ด Code.gs (19 คอลัมน์ รวมหน่วยบรรจุ) เรียบร้อยแล้ว!');
+                    showToast('success', 'คัดลอกโค้ด Code.gs สำหรับชีทใหม่เรียบร้อยแล้ว!');
                   }}
                   className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-semibold shadow-xs transition active:scale-95 cursor-pointer"
                   title="คัดลอกโค้ด Code.gs ทั้งหมดไปวางใน Apps Script"
@@ -488,15 +488,15 @@ export default function App() {
               </div>
             </div>
 
-            {/* Quick 3-Step Guide Banner */}
-            <div className="bg-white/80 p-3 rounded-xl border border-amber-200 text-xs text-slate-700 space-y-1">
-              <span className="font-bold text-amber-950 block">📌 วิธีทำให้ซิงค์ได้ใน 1 นาที:</span>
-              <ol className="list-decimal list-inside space-y-0.5 text-[11px] sm:text-xs text-slate-700 pl-1">
+            {/* Quick 5-Step Guide Banner */}
+            <div className="bg-white/80 p-3.5 rounded-xl border border-amber-200 text-xs text-slate-700 space-y-1.5">
+              <span className="font-bold text-amber-950 block">📌 วิธีทำให้ข้อมูลขึ้น Google Sheet ใหม่ใน 1 นาที:</span>
+              <ol className="list-decimal list-inside space-y-1 text-[11px] sm:text-xs text-slate-700 pl-1">
                 <li>กดปุ่ม <strong>"คัดลอก Code.gs (19 คอลัมน์)"</strong> ด้านบน</li>
-                <li>เปิด Google Sheet (ID: <code className="bg-amber-100 px-1 rounded">{gasConfig.sheetId}</code>) ไปที่เมนู <strong>ส่วนขยาย (Extensions) &gt; Apps Script</strong></li>
+                <li>เปิด Google Sheet ใหม่ (<a href={`https://docs.google.com/spreadsheets/d/${gasConfig.sheetId}/edit`} target="_blank" rel="noopener noreferrer" className="text-emerald-700 underline font-mono">ID: {gasConfig.sheetId}</a>) ไปที่เมนู <strong>ส่วนขยาย (Extensions) &gt; Apps Script</strong></li>
                 <li>ลบโค้ดเดิมทั้งหมดในไฟล์ <code>Code.gs</code> แล้ววางโค้ดที่คัดลอก จากนั้นกด <strong>บันทึก (💾)</strong></li>
-                <li>กด <strong>ทำให้ใช้งานได้ (Deploy) &gt; จัดการการทำให้ใช้งานได้ (Manage deployments)</strong> &gt; กดรูปดินสอ ✏️ &gt; เลือก <strong>เวอร์ชันใหม่ (New version)</strong> &gt; สิทธิ์เข้าถึงเป็น <strong>ทุกคน (Anyone)</strong> &gt; กด <strong>ทำให้ใช้งานได้</strong></li>
-                <li>กลับมากดปุ่ม <strong>"ลองซิงค์ใหม่"</strong> ข้อมูลและคอลัมน์หน่วยบรรจุจะซิงค์ลง Google Sheet ทันที!</li>
+                <li>กด <strong>ทำให้ใช้งานได้ (Deploy) &gt; การทำให้ใช้งานได้รายการใหม่ (New deployment)</strong> &gt; เลือกประเภท <strong>เว็บแอป (Web App)</strong> &gt; สิทธิ์เข้าถึง (Who has access) เป็น <strong>ทุกคน (Anyone)</strong> &gt; กด <strong>ทำให้ใช้งานได้</strong></li>
+                <li>คัดลอก <strong>URL เว็บแอปใหม่</strong> ที่ได้ นำมากดปุ่ม <strong>"วิธีแก้ด่วน &amp; ตั้งค่า URL"</strong> ด้านบน แล้ววางลงในช่อง URL แล้วกดบันทึก จากนั้นกด <strong>"ลองซิงค์ใหม่"</strong> ข้อมูลยาและคอลัมน์สถานะจะซิงค์ขึ้นชีทใหม่ทันที!</li>
               </ol>
             </div>
           </div>
@@ -531,7 +531,7 @@ export default function App() {
           onOpenImportModal={() => setIsImportModalOpen(true)}
           onExportExcel={() => exportDrugsToExcel(drugs)}
           onDownloadTemplate={downloadExcelTemplate}
-          sheetId={SHEET_ID}
+          sheetId={gasConfig.sheetId}
         />
 
       </main>
@@ -545,12 +545,12 @@ export default function App() {
             </span>
             <span>•</span>
             <a
-              href={`https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`}
+              href={`https://docs.google.com/spreadsheets/d/${gasConfig.sheetId}/edit`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-emerald-300 hover:underline font-mono"
             >
-              Google Sheet: {SHEET_ID.slice(0, 15)}...
+              Google Sheet: {gasConfig.sheetId.slice(0, 15)}...
             </a>
             {lastSyncTime && (
               <span className="text-[11px] bg-emerald-900/80 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-700">
@@ -592,6 +592,7 @@ export default function App() {
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         onImportDrugs={handleImportDrugs}
+        gasConfig={gasConfig}
       />
 
       {/* 4. Dispense History Modal */}

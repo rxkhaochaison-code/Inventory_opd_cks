@@ -1,7 +1,7 @@
 /**
  * เทมเพลตโค้ด Google Apps Script (Code.gs)
  * สำหรับนำไปวางในโปรเจกต์ Google Apps Script ของ รพ.เขาชัยสน
- * Sheet ID: 17Ja3Q7hKMt01AxGDhYbCkpE9RMHHCjIbf_aVEvqFROc
+ * Sheet ID: 1z4wlxHJlRdMPEubDenBDAyrqOlwpCBphu5FY5APUwjQ
  * Folder ID: 1O8MiCSQ43f2aoI7HvcPPY4EM97szYqlb
  */
 
@@ -54,13 +54,31 @@ const INVENTORY_HEADERS = [
   "อัปเดตล่าสุด (Last Updated)"
 ];
 
+// ฟังก์ชันเปิด Spreadsheet: รองรับทั้งระบุ ID และรันตรงใน Container ของ Sheet
+function getTargetSpreadsheet(requestedSheetId) {
+  var targetId = requestedSheetId || SPREADSHEET_ID;
+  if (targetId) {
+    try {
+      return SpreadsheetApp.openById(targetId);
+    } catch (e) {
+      Logger.log("openById failed for " + targetId + ": " + e);
+    }
+  }
+  try {
+    var active = SpreadsheetApp.getActiveSpreadsheet();
+    if (active) return active;
+  } catch (e) {}
+  throw new Error("ไม่สามารถเปิด Google Sheet (ID: " + targetId + ") ได้ กรุณาตรวจสอบสิทธิ์การแชร์ชีท หรือเปิดชีทใหม่แล้วไปที่ ส่วนขยาย > Apps Script เพื่อ Deploy");
+}
+
 /**
  * รองรับการดึงข้อมูลผ่าน GET Request
  */
 function doGet(e) {
   try {
     const action = (e && e.parameter && e.parameter.action) || "getItems";
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const reqSheetId = (e && e.parameter && e.parameter.sheetId) || SPREADSHEET_ID;
+    const ss = getTargetSpreadsheet(reqSheetId);
     
     if (action === "getItems") {
       const sheet = getOrCreateSheet(ss, SHEET_NAME_INVENTORY);
@@ -140,7 +158,7 @@ function doGet(e) {
     
     // อัปเดตสถานะทุกแถวใน Sheet ให้เป็นปัจจุบันตามวันเวลาวันนี้
     if (action === "refreshStatuses") {
-      const result = refreshAllStatusesInSheet();
+      const result = refreshAllStatusesInSheet(reqSheetId);
       return createJsonResponse({ status: "success", message: "อัปเดตสถานะยาใน Sheet เรียบร้อย", count: result });
     }
     
@@ -148,7 +166,8 @@ function doGet(e) {
       return createJsonResponse({
         status: "success",
         message: "ระบบเชื่อมต่อ Google Apps Script โรงพยาบาลเขาชัยสน สมบูรณ์",
-        sheetId: SPREADSHEET_ID,
+        sheetId: ss.getId(),
+        sheetName: ss.getName(),
         folderId: DRIVE_FOLDER_ID,
         serverTime: new Date().toISOString()
       });
@@ -171,7 +190,8 @@ function doPost(e) {
     }
     
     const action = payload.action;
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const reqSheetId = (payload && payload.sheetId) || SPREADSHEET_ID;
+    const ss = getTargetSpreadsheet(reqSheetId);
     
     // บันทึกรายการใหม่ หรือแก้ไขรายการ พร้อมคำนวณและเขียนสถานะลง Sheet ทันที
     if (action === "saveItem") {
@@ -534,8 +554,8 @@ function computeDrugStatuses(expiryDateStr, qty, min, max) {
 /**
  * อัปเดตสถานะของยาทุกแถวใน Google Sheet ทันที
  */
-function refreshAllStatusesInSheet() {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+function refreshAllStatusesInSheet(customSheetId) {
+  const ss = getTargetSpreadsheet(customSheetId || SPREADSHEET_ID);
   const sheet = ss.getSheetByName(SHEET_NAME_INVENTORY);
   if (!sheet) return 0;
   
@@ -634,7 +654,7 @@ function pushLineMessage(token, to, text) {
  * พร้อมอัปเดตสถานะใน Sheet อัตโนมัติทุกวัน
  */
 function dailyAutoCheckAndNotifyLine() {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const ss = getTargetSpreadsheet(SPREADSHEET_ID);
   const sheet = ss.getSheetByName(SHEET_NAME_INVENTORY);
   if (!sheet) return;
   
@@ -924,7 +944,7 @@ function createTelegramTrigger() {
     }
   }
   
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const ss = getTargetSpreadsheet(SPREADSHEET_ID);
   
   // 1. ตรวจสอบทันทีเมื่อมีการแก้ไขเซลล์ใน Google Sheet (onEdit installable trigger)
   ScriptApp.newTrigger("checkInventoryAndNotifyTelegram")

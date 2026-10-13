@@ -475,7 +475,7 @@ export const GasSetupModal: React.FC<GasSetupModalProps> = ({
                   value={sheetId}
                   onChange={(e) => setSheetId(e.target.value)}
                   className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white"
-                  placeholder="เช่น 17Ja3Q7hKMt01AxGDhYbCkpE9RMHHCjIbf_aVEvqFROc"
+                  placeholder="เช่น 1z4wlxHJlRdMPEubDenBDAyrqOlwpCBphu5FY5APUwjQ"
                 />
               </div>
 

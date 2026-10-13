@@ -47,7 +47,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
   onOpenImportModal,
   onExportExcel,
   onDownloadTemplate,
-  sheetId = '17Ja3Q7hKMt01AxGDhYbCkpE9RMHHCjIbf_aVEvqFROc',
+  sheetId = '1z4wlxHJlRdMPEubDenBDAyrqOlwpCBphu5FY5APUwjQ',
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [subWarehouseFilter, setSubWarehouseFilter] = useState<string>('all');

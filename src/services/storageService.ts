@@ -11,7 +11,7 @@ const STORAGE_KEYS = {
 };
 
 export const DEFAULT_GAS_CONFIG: GasConfig = {
-  sheetId: '17Ja3Q7hKMt01AxGDhYbCkpE9RMHHCjIbf_aVEvqFROc',
+  sheetId: '1z4wlxHJlRdMPEubDenBDAyrqOlwpCBphu5FY5APUwjQ',
   scriptUrl: 'https://script.google.com/macros/s/AKfycbxKRcFl73ckyd5zFc6dWvpz0WgxVdGKOAuJvU-zZJ2kfING9ShQhdNf53rEfIhRIqR5vA/exec',
   folderId: '1O8MiCSQ43f2aoI7HvcPPY4EM97szYqlb',
   autoSync: true,
@@ -76,7 +76,12 @@ export const StorageService = {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.GAS_CONFIG);
       if (data) {
-        return { ...DEFAULT_GAS_CONFIG, ...JSON.parse(data) };
+        const parsed = JSON.parse(data);
+        if (!parsed.sheetId || parsed.sheetId === '17Ja3Q7hKMt01AxGDhYbCkpE9RMHHCjIbf_aVEvqFROc') {
+          parsed.sheetId = DEFAULT_GAS_CONFIG.sheetId;
+          localStorage.setItem(STORAGE_KEYS.GAS_CONFIG, JSON.stringify({ ...DEFAULT_GAS_CONFIG, ...parsed }));
+        }
+        return { ...DEFAULT_GAS_CONFIG, ...parsed };
       }
     } catch (e) {
       console.error('Failed to read GAS config', e);
