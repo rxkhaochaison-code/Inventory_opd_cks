@@ -162,11 +162,10 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={() => onOpenGasModal('telegram')}
               className="flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-sky-900/80 hover:bg-sky-800 text-sky-200 hover:text-white border border-sky-700/80 transition shadow-sm cursor-pointer"
-              title="Telegram Bot (@pharmkcsbot) - เชื่อมต่อแล้ว คลิกเพื่อทดสอบหรือตั้งค่าการแจ้งเตือน"
+              title="Telegram Bot - เชื่อมต่อแล้ว คลิกเพื่อทดสอบหรือตั้งค่าการแจ้งเตือน"
             >
               <Send className="w-4 h-4 text-sky-300" />
-              <span className="hidden xl:inline">Telegram (@pharmkcsbot)</span>
-              <span className="xl:hidden">Telegram</span>
+              <span>Telegram</span>
             </button>
 
             {/* Dispense History */}

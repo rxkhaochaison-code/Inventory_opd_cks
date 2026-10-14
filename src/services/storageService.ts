@@ -122,11 +122,17 @@ export const StorageService = {
       const data = localStorage.getItem(STORAGE_KEYS.TELEGRAM_CONFIG);
       if (data) {
         const parsed = JSON.parse(data);
+        // หากผู้ใช้มีค่าเดิมเป็นบอทเก่าหรือกลุ่มเดิม -1003988336306 ให้สลับมาใช้ที่ใหม่ทันทีตามคำสั่ง
+        const isOldBot = !parsed.botToken || parsed.botToken === '8611276269:AAE2EurSH1eFfydkNRaDTYfZoJk1v1YLkBc';
+        const isOldGroup = parsed.groupId === '-1003988336306' || parsed.chatId === '-1003988336306' || !parsed.groupId;
+        
         const config: TelegramConfig = {
           ...DEFAULT_TELEGRAM_CONFIG,
           ...parsed,
-          chatId: '-1003988336306', // ตั้งค่าส่งเข้ากลุ่ม Inventory kcs เป็นหลัก
-          groupId: '-1003988336306',
+          botToken: isOldBot ? DEFAULT_TELEGRAM_CONFIG.botToken : parsed.botToken,
+          botId: parsed.botId || DEFAULT_TELEGRAM_CONFIG.botId,
+          chatId: isOldGroup ? DEFAULT_TELEGRAM_CONFIG.chatId : parsed.chatId,
+          groupId: isOldGroup ? DEFAULT_TELEGRAM_CONFIG.groupId : parsed.groupId,
           notifyGroup: true,
         };
         // บันทึกกลับเพื่อให้ localStorage อัปเดตทันที
@@ -136,6 +142,7 @@ export const StorageService = {
     } catch (e) {
       console.error('Failed to read Telegram config', e);
     }
+    localStorage.setItem(STORAGE_KEYS.TELEGRAM_CONFIG, JSON.stringify(DEFAULT_TELEGRAM_CONFIG));
     return DEFAULT_TELEGRAM_CONFIG;
   },
 

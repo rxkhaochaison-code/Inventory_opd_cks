@@ -25,11 +25,11 @@ const SHEET_NAME_CONFIG = "การตั้งค่า";
 const LINE_CHANNEL_ACCESS_TOKEN = "YOUR_LINE_CHANNEL_ACCESS_TOKEN";
 const LINE_DESTINATION_ID = "YOUR_LINE_USER_OR_GROUP_ID";
 
-// Telegram Bot Settings (เชื่อมต่อระบบคลังยานอก รพ.เขาชัยสน @pharmkcsbot)
-const TELEGRAM_BOT_TOKEN = "8611276269:AAE2EurSH1eFfydkNRaDTYfZoJk1v1YLkBc";
-const TELEGRAM_CHAT_ID = "-1003988336306"; // ID กลุ่ม Telegram: Inventory kcs (ปลายทางหลัก)
-const TELEGRAM_GROUP_ID = "-1003988336306"; // กลุ่ม Inventory kcs รพ.เขาชัยสน
-const TELEGRAM_USER_ID = "8912234135"; // แชทส่วนตัว
+// Telegram Bot Settings (เชื่อมต่อระบบคลังยานอก รพ.เขาชัยสน)
+const TELEGRAM_BOT_TOKEN = "8939804029:AAHbGhUHnaPyAjRG8bzLpGRagstrZXpi2UQ";
+const TELEGRAM_BOT_ID = "8739503406";
+const TELEGRAM_CHAT_ID = "-5583489864"; // กลุ่ม Telegram ใหม่ (ปลายทางหลัก)
+const TELEGRAM_GROUP_ID = "-5583489864"; // กลุ่ม Telegram ใหม่
 
 // หัวตารางคลังยาแบบแสดงสถานะครบถ้วน (พร้อมหน่วยบรรจุ)
 const INVENTORY_HEADERS = [
@@ -763,10 +763,10 @@ function checkInventoryAndNotifyTelegram() {
   // --- ข้อมูล Telegram Bot ของคุณ ---
   var token = TELEGRAM_BOT_TOKEN;
   
-  // รายชื่อแชทเป้าหมาย (ส่งเข้ากลุ่ม Telegram Inventory kcs: -1003988336306 เป็นหลักเสมอ)
-  var mainGroupId = "-1003988336306";
+  // รายชื่อแชทเป้าหมาย (ส่งเข้ากลุ่ม Telegram ใหม่: -5583489864 เท่านั้น)
+  var mainGroupId = "-5583489864";
   var targetChatIds = [mainGroupId];
-  if (TELEGRAM_CHAT_ID && TELEGRAM_CHAT_ID !== mainGroupId && targetChatIds.indexOf(TELEGRAM_CHAT_ID) === -1) {
+  if (TELEGRAM_CHAT_ID && TELEGRAM_CHAT_ID !== mainGroupId && TELEGRAM_CHAT_ID !== "-1003988336306" && targetChatIds.indexOf(TELEGRAM_CHAT_ID) === -1) {
     targetChatIds.push(TELEGRAM_CHAT_ID);
   }
   
@@ -964,7 +964,7 @@ function createTelegramTrigger() {
     .everyMinutes(15)
     .create();
     
-  Logger.log("ติดตั้ง Trigger Telegram เข้ากลุ่ม Inventory kcs (-1003988336306) สำเร็จเรียบร้อยแล้ว");
+  Logger.log("ติดตั้ง Trigger Telegram เข้ากลุ่ม (-5583489864) สำเร็จเรียบร้อยแล้ว");
 }
 
 /**

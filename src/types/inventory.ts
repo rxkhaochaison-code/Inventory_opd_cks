@@ -46,8 +46,9 @@ export interface LineConfig {
 
 export interface TelegramConfig {
   botToken: string;
+  botId?: string;              // Bot ID (เช่น 8739503406)
   chatId: string;
-  groupId: string;             // ID กลุ่ม Telegram (เช่น -1003988336306)
+  groupId: string;             // ID กลุ่ม Telegram (เช่น -5583489864)
   enabled: boolean;
   notifyOnSave: boolean;
   notifyOnDispense: boolean;

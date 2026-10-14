@@ -2,9 +2,10 @@ import { DrugItem, DispenseRecord, TelegramConfig } from '../types/inventory';
 import { getDrugStatus, getSimpleDrugStatus } from '../utils/drugUtils';
 
 export const DEFAULT_TELEGRAM_CONFIG: TelegramConfig = {
-  botToken: '8611276269:AAE2EurSH1eFfydkNRaDTYfZoJk1v1YLkBc',
-  chatId: '-1003988336306', // กลุ่ม Inventory kcs รพ.เขาชัยสน (ปลายทางหลัก)
-  groupId: '-1003988336306', // กลุ่ม Inventory kcs รพ.เขาชัยสน
+  botToken: '8939804029:AAHbGhUHnaPyAjRG8bzLpGRagstrZXpi2UQ',
+  botId: '8739503406',
+  chatId: '-5583489864',
+  groupId: '-5583489864', // กลุ่มเป้าหมายใหม่
   enabled: true,
   notifyOnSave: true,
   notifyOnDispense: true,
@@ -24,22 +25,26 @@ function escapeHtml(text: any): string {
 export const TelegramService = {
   /**
    * รวมรายชื่อห้องแชทและกลุ่มทั้งหมดที่ต้องส่งข้อความไปหา
-   * กำหนดให้กลุ่ม Telegram (-1003988336306 : Inventory kcs) เป็นเป้าหมายหลักเสมอ
+   * กำหนดให้กลุ่ม Telegram ใหม่ (-5583489864) เป็นเป้าหมายหลัก
    */
   getTargetChatIds(config: TelegramConfig): string[] {
     const list: string[] = [];
 
-    // 1. กลุ่ม Telegram (-1003988336306) ให้ความสำคัญเป็นเป้าหมายหลักอันดับ 1
-    const targetGroup = (config.groupId && config.groupId.trim()) || '-1003988336306';
-    if (!list.includes(targetGroup)) {
-      list.push(targetGroup);
+    // 1. กลุ่ม Telegram ใหม่ (-5583489864) ให้ความสำคัญเป็นเป้าหมายหลักอันดับ 1
+    const targetGroup = (config.groupId && config.groupId.trim()) || '-5583489864';
+    if (targetGroup && targetGroup !== '-1003988336306') {
+      if (!list.includes(targetGroup)) list.push(targetGroup);
+    } else {
+      list.push('-5583489864');
     }
 
-    // 2. Chat ID อื่นๆ (ถ้าผู้ใช้กำหนดเพิ่มเติม และไม่ซ้ำกับกลุ่ม)
-    if (config.chatId && config.chatId.trim() && config.chatId.trim() !== targetGroup) {
+    // 2. Chat ID อื่นๆ (ถ้าผู้ใช้กำหนดเพิ่มเติม และต้องไม่ใช่กลุ่มเก่า -1003988336306)
+    if (config.chatId && config.chatId.trim()) {
       config.chatId.split(',').forEach((c) => {
         const trimmed = c.trim();
-        if (trimmed && !list.includes(trimmed)) list.push(trimmed);
+        if (trimmed && trimmed !== '-1003988336306' && !list.includes(trimmed)) {
+          list.push(trimmed);
+        }
       });
     }
 
@@ -108,8 +113,8 @@ export const TelegramService = {
   async testConnection(config: TelegramConfig): Promise<{ success: boolean; message: string }> {
     const timeStr = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
     const targets = this.getTargetChatIds(config);
-    const targetInfo = targets.includes('-1003988336306')
-      ? 'กลุ่ม Inventory kcs (-1003988336306) และแชทเป้าหมาย'
+    const targetInfo = targets.includes('-5583489864')
+      ? 'กลุ่ม Telegram (-5583489864)'
       : `${targets.length} แชทเป้าหมาย`;
 
     const text = `🏥 <b>ระบบคลังยานอก รพ.เขาชัยสน</b>\n\n` +
@@ -160,7 +165,7 @@ export const TelegramService = {
       (drug.packageUnit ? ` (${escapeHtml(drug.packageUnit)})` : '') + `\n` +
       `• <b>วันหมดอายุ:</b> ${escapeHtml(drug.expiryDate)} (เหลือ ${st.daysLeft} วัน)\n` +
       `• <b>Min / Max:</b> ${drug.min} / ${drug.max || '-'}\n` +
-      `• <b>ปลายทาง:</b> กลุ่ม Telegram Inventory kcs`;
+      `• <b>ปลายทาง:</b> กลุ่ม Telegram (-5583489864)`;
 
     return this.sendMessage(config, message);
   },
