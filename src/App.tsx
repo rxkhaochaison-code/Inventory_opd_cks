@@ -538,7 +538,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-['Sarabun',sans-serif] text-slate-800">
+    <div className="min-h-screen bg-slate-100 flex flex-col font-['Sarabun',sans-serif] text-slate-800 w-full max-w-full overflow-x-hidden">
       
       {/* Toast Notification */}
       {toastMessage && (
@@ -585,7 +585,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5 sm:space-y-6">
         {/* Apps Script Guide when sync status has error */}
         {syncStatus.status === 'error' && (
           <div className="bg-amber-50 border border-amber-300 p-4 rounded-2xl shadow-xs text-slate-800 space-y-2">
